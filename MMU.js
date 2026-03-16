@@ -194,11 +194,24 @@ MMU = {
                         GPU.updateoam(addr, val);
                         break;
                     
-                    // Zeropage RAM, I/O
+                    // Zero-page RAM, I/O
                     case 0xF00:
                         if(addr > 0xFF7F)
                             MMU._zram[addr & 0x7F] = val;
-                        else switch(addr & 0xF0){}
+                        else
+                        {
+                            // I/O
+                            switch(addr & 0xF0){
+                                // GPU
+                                case 0x40:
+                                case 0x50:
+                                case 0x60:
+                                case 0x70:
+                                    GPU.wb(addr, val);
+                                    break;
+
+                            }
+                        }
                 }
                 break;
 
