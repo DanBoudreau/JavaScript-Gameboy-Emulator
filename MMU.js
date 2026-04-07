@@ -119,10 +119,17 @@ MMU = {
 
                     // zero page
                     case 0xF00:
-                        if(addr >= 0xFF80)
+                        if(addr >= 0xFF80){
                             return MMU._zram[addr & 0x7F];
-                        else
-                            return 0; // I/O control handling, currently Unhandled
+                        }
+                        else if(addr >=0xFF40){
+                            // GPU 64 registers
+                            return GPU.rb(addr);
+                        }
+                        else switch(addr & 0x3F){
+                            case 0x00: return KEY.rb();
+                            default: return 0;
+                        }
 
                 };
 

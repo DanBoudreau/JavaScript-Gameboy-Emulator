@@ -210,11 +210,69 @@ Z80 = {
 
         },
 
+        // Push registers D and E to the stack
+        PUSHDE: function() {
+            Z80._reg.sp--;                                      // Drop through the stack
+            MMU.wb(Z80._reg.sp, Z80._reg.d);                    // Write B
+            Z80._reg.sp--;                                      // Drop through the stack
+            MMU.wb(Z80._reg.sp, Z80._reg.e);                    // Write C
+            Z80._reg.m = 3; Z80._reg.t = 12;                    // 3 M-times taken
+
+        },
+
+        // Push registers H and L to the stack
+        PUSHHL: function() {
+            Z80._reg.sp--;                                      // Drop through the stack
+            MMU.wb(Z80._reg.sp, Z80._reg.h);                    // Write B
+            Z80._reg.sp--;                                      // Drop through the stack
+            MMU.wb(Z80._reg.sp, Z80._reg.l);                    // Write C
+            Z80._reg.m = 3; Z80._reg.t = 12;                    // 3 M-times taken
+
+        },
+
+        // Push registers A and F to the stack
+        PUSHAF: function() {
+            Z80._reg.sp--;                                      // Drop through the stack
+            MMU.wb(Z80._reg.sp, Z80._reg.a);                    // Write B
+            Z80._reg.sp--;                                      // Drop through the stack
+            MMU.wb(Z80._reg.sp, Z80._reg.f);                    // Write C
+            Z80._reg.m = 3; Z80._reg.t = 12;                    // 3 M-times taken
+
+        },
+
+        //Pop registers B and C from the stack
+        POPBC: function() {
+            Z80._reg.c = MMU.rb(Z80._reg.sp);                   // Read B
+            Z80._reg.sp++;                                      // Move back up the stack
+            Z80._reg.b = MMU.rb(Z80._reg.sp);                   // Read C
+            Z80._reg.sp++;                                      // Move back up the stack
+            Z80._reg.m = 3; Z80._reg.t = 12;                    // 3 M-times taken
+        },
+
+        //Pop registers D and E from the stack
+        POPDE: function() {
+            Z80._reg.e = MMU.rb(Z80._reg.sp);                   // Read D
+            Z80._reg.sp++;                                      // Move back up the stack
+            Z80._reg.d = MMU.rb(Z80._reg.sp);                   // Read E
+            Z80._reg.sp++;                                      // Move back up the stack
+            Z80._reg.m = 3; Z80._reg.t = 12;                    // 3 M-times taken
+        },
+
         //Pop registers H and L from the stack
         POPHL: function() {
             Z80._reg.l = MMU.rb(Z80._reg.sp);                   // Read L
             Z80._reg.sp++;                                      // Move back up the stack
-            Z80._reg.l = MMU.rb(Z80._reg.sp);                   // Read H
+            Z80._reg.h = MMU.rb(Z80._reg.sp);                   // Read H
+            Z80._reg.sp++;                                      // Move back up the stack
+            Z80._reg.m = 3; Z80._reg.t = 12;                    // 3 M-times taken
+
+        },
+
+        //Pop registers A and F from the stack
+        POPHL: function() {
+            Z80._reg.f = MMU.rb(Z80._reg.sp);                   // Read L
+            Z80._reg.sp++;                                      // Move back up the stack
+            Z80._reg.a = MMU.rb(Z80._reg.sp);                   // Read H
             Z80._reg.sp++;                                      // Move back up the stack
             Z80._reg.m = 3; Z80._reg.t = 12;                    // 3 M-times taken
 
