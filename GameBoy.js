@@ -4,7 +4,7 @@ GameBoy = {
         MMU.reset();
         Z80.reset();
 
-        MMU.load('test.gb');
+        MMU.load('test-files/test.gb');
     },
 
     frame: function(){

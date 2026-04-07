@@ -28,20 +28,27 @@ MMU = {
         0x21, 0x04, 0x01, 0x11, 0xA8, 0x00, 0x1A, 0x13, 0xBE, 0x20, 0xFE, 0x23, 0x7D, 0xFE, 0x34, 0x20,
         0xF5, 0x06, 0x19, 0x78, 0x86, 0x23, 0x05, 0x20, 0xFB, 0x86, 0x20, 0xFE, 0x3E, 0x01, 0xE0, 0x50
     ],
-    _rom: [],
+    _rom: '',
+    _carttype: 0,
     _wram: [],
     _eram: [],
     _zram: [],
+    _ie: 0,
+    _if: 0,
 
     reset: function(){
-        for(i=0;i<8192;i++){
-            MMU._vram[i] = 0;
-            MMU._eram[i] = 0;
-
+        for(i=0; i<8192; i++){
+            MMU._wram[i] = 0;
         }
-        for(i=0;i<127;i++){
+
+        for(i=0; i<32768; i++){
+            MMU._eram[i] = 0;
+        }
+
+        for(i=0; i<127; i++){
             MMU._zram[i] = 0;
         }
+
         MMU._inbios=1;
         MMU._ie=0;
         MMU._if=0;
@@ -50,6 +57,9 @@ MMU = {
     load: function(file){
         b = new BinFileReader(file);
         MMU._rom = b.readString(b.getFileSize(), 0);
+        MMU._carttype = MMU._rom.charCodeAt(0x0147);
+
+        LOG.out('MMU', 'ROM loaded, '+ MMU._rom.length +' bytes.');
     },
 
 
@@ -62,7 +72,7 @@ MMU = {
                 if(MMU._inbios){
                     if(addr < 0x0100)
                         return MMU._bios[addr];
-                    else if(Z80._r._pc == 0x0100)
+                    else if(Z80._reg._pc == 0x0100)
                         MMU._inbios = 0;
                 };
                 return MMU._rom[addr];

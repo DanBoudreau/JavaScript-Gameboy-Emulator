@@ -4,6 +4,11 @@ Z80 = {
     // Time clock types
     _clock: {m:0, t:0},
 
+    _halt: 0,
+    _stop: 0,
+    _map:[],
+    _cbmap:[],
+
     // register set
     _reg: {
             a:0, b:0, c:0, d:0, e:0, h:0, l:0, f:0,         // 8-bit registers
@@ -14,12 +19,26 @@ Z80 = {
 
     // Reset routine for CPU, sets all registers to 0
     reset: function() {
-            Z80._r.a = 0; Z80._r.b = 0; Z80._r.c = 0; Z80._r.d = 0;
-            Z80._r.e = 0; Z80._r.h = 0; Z80._r.l = 0; Z80._r.f = 0;
-            Z80._r.sp = 0;
-            Z80._r.pc = 0;                                      // Start execution at 0
+            Z80._reg.a = 0; Z80._reg.b = 0; Z80._reg.c = 0; Z80._reg.d = 0;
+            Z80._reg.e = 0; Z80._reg.h = 0; Z80._reg.l = 0; Z80._reg.f = 0;
+            Z80._reg.sp = 0;
+            Z80._reg.pc = 0;                                      // Start execution at 0
 
             Z80._clock.m = 0; Z80._clock.t = 0;
+            Z80._halt = 0;
+            Z80._stop = 0;
+
+    },
+
+    exec: function() {
+            Z80._reg.r = (Z80._reg.r + 1) & 127;
+            Z80._map[MMU.rb(Z80._reg.pc++)]();
+            Z80._reg.pc &= 65535;
+            Z80._clock.m += Z80._reg.m;
+            Z80._clock.t += Z80._reg.t;
+            if(MMU._inbios && Z80._reg.pc == 0x0100){
+                MMU._inbios=0;
+            }
     },
 
 
@@ -293,6 +312,7 @@ Z80 = {
     
 
 };
+
 
 // Dispatch loop
     while(true){
