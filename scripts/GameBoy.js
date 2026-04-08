@@ -137,13 +137,14 @@ GameBoy = {
         if(typeof APU === 'undefined' || !APU)
             return;
 
-        if(APU._userEnabled) {
-            APU.disableAudio();
-            document.getElementById('audio').innerHTML = 'Enable Audio';
+        var audioToggle = document.getElementById('audio');
+        var shouldEnable = audioToggle ? audioToggle.checked : !APU._userEnabled;
+
+        if(shouldEnable) {
+            APU.enableAudio();
         }
         else {
-            APU.enableAudio();
-            document.getElementById('audio').innerHTML = 'Audio On';
+            APU.disableAudio();
         }
     },
 
@@ -158,7 +159,7 @@ GameBoy = {
 window.onload = function(){
     this.document.getElementById('reset').onclick = GameBoy.reset;
     this.document.getElementById('run').onclick = GameBoy.run;
-    this.document.getElementById('audio').onclick = GameBoy.toggleAudio;
+    this.document.getElementById('audio').onchange = GameBoy.toggleAudio;
     this.document.getElementById('volume').oninput = function(e) {
         GameBoy.setVolume(Number(e.target.value));
     };
