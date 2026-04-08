@@ -19,9 +19,23 @@
                 box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
                 margin-bottom: 16px;
             }
+
+            .audio-controls {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                margin: 12px 0;
+            }
+
+            .audio-controls label {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+            }
         </style>
         <script type="text/javascript" src="RomReader.js"></script>
         <script type="text/javascript" src="GPU.js"></script>
+        <script type="text/javascript" src="APU.js"></script>
         <script type="text/javascript" src="MMU.js"></script>
         <script type="text/javascript" src="Keys.js"></script>
         <script type="text/javascript" src="GB_Z80.js"></script>
@@ -36,6 +50,14 @@
     </div>
     <br>
     <input type="file" id="romfile" accept=".gb">
+    <br>
+    <div class="audio-controls">
+        <button id="audio">Enable Audio</button>
+        <label for="volume">
+            Volume
+            <input type="range" id="volume" min="0" max="100" value="18">
+        </label>
+    </div>
     <br>
     <a id="reset">Reset</a>   |   <a id="run">Run</a>
     </body>

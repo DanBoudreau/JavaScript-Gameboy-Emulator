@@ -1,4 +1,9 @@
 GameBoy = {
+    _frameDurationMs: 1000 / 59.7275,
+    _accumulatorMs: 0,
+    _lastTimestamp: 0,
+    _rafHandle: null,
+
     bootstrap: function() {
         MMU._inbios = 0;
         Z80._reg.a = 0x01;
@@ -13,6 +18,24 @@ GameBoy = {
         Z80._reg.pc = 0x0100;
         Z80._reg.ime = 0;
 
+        MMU.wb(0xFF10, 0x80);
+        MMU.wb(0xFF11, 0xBF);
+        MMU.wb(0xFF12, 0xF3);
+        MMU.wb(0xFF14, 0xBF);
+        MMU.wb(0xFF16, 0x3F);
+        MMU.wb(0xFF17, 0x00);
+        MMU.wb(0xFF19, 0xBF);
+        MMU.wb(0xFF1A, 0x7F);
+        MMU.wb(0xFF1B, 0xFF);
+        MMU.wb(0xFF1C, 0x9F);
+        MMU.wb(0xFF1E, 0xBF);
+        MMU.wb(0xFF20, 0xFF);
+        MMU.wb(0xFF21, 0x00);
+        MMU.wb(0xFF22, 0x00);
+        MMU.wb(0xFF23, 0xBF);
+        MMU.wb(0xFF24, 0x77);
+        MMU.wb(0xFF25, 0xF3);
+        MMU.wb(0xFF26, 0xF1);
         MMU.wb(0xFF05, 0x00);
         MMU.wb(0xFF06, 0x00);
         MMU.wb(0xFF07, 0x00);
@@ -34,6 +57,8 @@ GameBoy = {
         KEY.reset();
         if(typeof TIMER !== 'undefined' && TIMER && typeof TIMER.reset === 'function')
             TIMER.reset();
+        if(typeof APU !== 'undefined' && APU && typeof APU.reset === 'function')
+            APU.reset();
         
         // Skip BIOS and start directly at ROM entry point
         GameBoy.bootstrap();
@@ -42,6 +67,8 @@ GameBoy = {
         Z80._stepM = 0;
         Z80._stepT = 0;
         GameBoy._frameCount = 0;
+        GameBoy._accumulatorMs = 0;
+        GameBoy._lastTimestamp = 0;
         Z80._execCount = undefined;
         Z80._romStartLogged = false;
         console.log('Skipping BIOS, jumping to ROM entry at 0x0100');
@@ -59,28 +86,83 @@ GameBoy = {
         
         GameBoy._frameCount++;
     },
-    
-    _interval: null,
+
+    _tick: function(timestamp) {
+        if(!GameBoy._rafHandle)
+            return;
+
+        if(!GameBoy._lastTimestamp)
+            GameBoy._lastTimestamp = timestamp;
+
+        var elapsed = timestamp - GameBoy._lastTimestamp;
+        GameBoy._lastTimestamp = timestamp;
+        if(elapsed > 250)
+            elapsed = GameBoy._frameDurationMs;
+
+        GameBoy._accumulatorMs += elapsed;
+
+        var framesRun = 0;
+        while(GameBoy._accumulatorMs >= GameBoy._frameDurationMs && framesRun < 4) {
+            GameBoy.frame();
+            GameBoy._accumulatorMs -= GameBoy._frameDurationMs;
+            framesRun++;
+        }
+
+        GameBoy._rafHandle = window.requestAnimationFrame(GameBoy._tick);
+    },
 
     run: function(){
-        if(!GameBoy._interval){
+        if(!GameBoy._rafHandle){
+            if(typeof APU !== 'undefined' && APU && typeof APU.enableAudio === 'function')
+                APU.enableAudio();
             console.log('GameBoy.run() called, starting frame loop...');
-            GameBoy._interval = setInterval(GameBoy.frame, 1);
+            GameBoy._accumulatorMs = 0;
+            GameBoy._lastTimestamp = 0;
+            GameBoy._rafHandle = window.requestAnimationFrame(GameBoy._tick);
             document.getElementById('run').innerHTML = 'Pause';
         }
         else{
             console.log('GameBoy.run() called, pausing...');
-            clearInterval(GameBoy._interval);
-            GameBoy._interval = null;
+            window.cancelAnimationFrame(GameBoy._rafHandle);
+            GameBoy._rafHandle = null;
+            GameBoy._accumulatorMs = 0;
+            GameBoy._lastTimestamp = 0;
             document.getElementById('run').innerHTML = 'Run';
 
         }
+    }
+,
+
+    toggleAudio: function(){
+        if(typeof APU === 'undefined' || !APU)
+            return;
+
+        if(APU._userEnabled) {
+            APU.disableAudio();
+            document.getElementById('audio').innerHTML = 'Enable Audio';
+        }
+        else {
+            APU.enableAudio();
+            document.getElementById('audio').innerHTML = 'Audio On';
+        }
+    },
+
+    setVolume: function(value){
+        if(typeof APU === 'undefined' || !APU || typeof APU.setVolume !== 'function')
+            return;
+
+        APU.setVolume(value / 100);
     }
 };
 
 window.onload = function(){
     this.document.getElementById('reset').onclick = GameBoy.reset;
     this.document.getElementById('run').onclick = GameBoy.run;
+    this.document.getElementById('audio').onclick = GameBoy.toggleAudio;
+    this.document.getElementById('volume').oninput = function(e) {
+        GameBoy.setVolume(Number(e.target.value));
+    };
+    GameBoy.setVolume(Number(this.document.getElementById('volume').value));
     
     window.onkeydown = function(e) {
         KEY.keydown(e);
