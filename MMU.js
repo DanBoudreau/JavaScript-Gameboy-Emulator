@@ -29,37 +29,72 @@ MMU = {
         0xF5, 0x06, 0x19, 0x78, 0x86, 0x23, 0x05, 0x20, 0xFB, 0x86, 0x20, 0xFE, 0x3E, 0x01, 0xE0, 0x50
     ],
     _rom: '',
-    _carttype: 0,
     _wram: [],
     _eram: [],
     _zram: [],
+    
+    // copy of the ROM cartridge type, used for MBC handling
+    _carttype: 0,
+    
     _ie: 0,
     _if: 0,
+    
+    // MBC states
+    _mbc: [],
+
+    // Offset for ROM bank
+    _rombankoffset: 0x4000,
+
+    // Offset for RAM bank
+    _rambankoffset: 0x0000,
+
 
     reset: function(){
-        for(i=0; i<8192; i++){
+        for(var i = 0; i < 8192; i++){
             MMU._wram[i] = 0;
         }
 
-        for(i=0; i<32768; i++){
+        for(var i = 0; i < 32768; i++){
             MMU._eram[i] = 0;
         }
 
-        for(i=0; i<127; i++){
+        for(var i = 0; i < 127; i++){
             MMU._zram[i] = 0;
         }
 
-        MMU._inbios=1;
-        MMU._ie=0;
-        MMU._if=0;
+        MMU._inbios = 1;
+        MMU._ie = 0;
+        MMU._if = 0;
+
+        // initialize MBC states
+        MMU._mbc[0] = {};
+        MMU._mbc[1] = { 
+            romBank: 1,     // selected Rom Bank
+            ramBank: 0,     // selected Ram Bank (if applicable)
+            ramEnabled: 0,  // Ram enable flag
+            bankingMode: 0  // 0: ROM Banking Mode, 1: RAM Banking Mode
+        };
+        MMU._mbc[5] = {
+            romBank: 1,
+            ramBank: 0,
+            ramEnabled: 0
+        };
+        MMU._rombankoffset = 0x4000;
+        MMU._rambankoffset = 0x0000;
+
     },
 
     load: function(file){
-        b = new BinFileReader(file);
-        MMU._rom = b.readString(b.getFileSize(), 0);
-        MMU._carttype = MMU._rom.charCodeAt(0x0147);
+        try {
+            var b = new BinFileReader(file);
+            MMU._rom = b.readString(b.getFileSize(), 0);
+            MMU._carttype = MMU._rom.charCodeAt(0x0147);
 
-        LOG.out('MMU', 'ROM loaded, '+ MMU._rom.length +' bytes.');
+            LOG.out('MMU', 'ROM loaded, '+ MMU._rom.length +' bytes.');
+        } catch (e) {
+            console.error('Failed to load ROM:', e.message);
+            alert('Failed to load ROM: ' + e.message);
+        }
     },
 
 
@@ -72,35 +107,40 @@ MMU = {
                 if(MMU._inbios){
                     if(addr < 0x0100)
                         return MMU._bios[addr];
-                    else if(Z80._reg._pc == 0x0100)
+                    else if(addr >= 0x0100) {
                         MMU._inbios = 0;
+                        console.log('BIOS dismounted at address 0x' + addr.toString(16));
+                    }
                 };
-                return MMU._rom[addr];
+                var val = MMU._rom.charCodeAt(addr);
+                return isNaN(val) ? 0 : val;
             
             // ROM0
             case 0x1000:
             case 0x2000:
             case 0x3000:
-                return MMU._rom[addr];
+                var val = MMU._rom.charCodeAt(addr);
+                return isNaN(val) ? 0 : val;
 
-            // ROM1 (unbanked) (16K)
+            // ROM1 (switched bank)
             case 0x4000:
             case 0x5000:
             case 0x6000:
             case 0x7000:
-                return MMU._rom[addr];
+                var val = MMU._rom.charCodeAt(MMU._rombankoffset + (addr & 0x3FFF));
+                return isNaN(val) ? 0 : val;
             
-            // Graphics: VRAM (8K)
+            // Graphics: VRAM
             case 0x8000:
             case 0x9000:
-                return getComputedStyle._vram[addr & 0x1FFF];
+                return GPU._vram[addr & 0x1FFF];
             
-            // External RAM (8K)
+            // External RAM
             case 0xA000:
             case 0xB000:
-                return MMU._eram[addr & 0x1FFF];
+                return MMU._eram[MMU._rambankoffset + (addr & 0x1FFF)];
 
-            // Working RAM (8K)
+            // Working RAM
             case 0xC000:
             case 0xD000:
                 return MMU._wram[addr & 0x1FFF];
@@ -122,26 +162,36 @@ MMU = {
                     // Graphics: object attribute memory
                     //OAM is 160 bytes, remaining bytes read as 0
                     case 0xE00:
-                        if(addr < 0xFEA0)
-                            return getComputedStyle._oam[addr & 0xFF];
-                        else
-                            return 0;
+                        return (addr < 0xFEA0) ? GPU._oam[addr & 0xFF] : 0;
 
                     // zero page
                     case 0xF00:
-                        if(addr >= 0xFF80){
+                        if(addr == 0xFFFF){
+			                return MMU._ie;
+                        }
+                        else if(addr == 0xFF0F){
+                            return MMU._if;
+                        }
+                        else if(addr >= 0xFF80){
                             return MMU._zram[addr & 0x7F];
                         }
                         else if(addr >=0xFF40){
                             // GPU 64 registers
                             return GPU.rb(addr);
                         }
-                        else switch(addr & 0x3F){
-                            case 0x00: return KEY.rb();
-                            default: return 0;
+                        switch(addr) {
+                            case 0xFF00: return KEY.rb();
+                            case 0xFF04:
+                            case 0xFF05:
+                            case 0xFF06:
+                            case 0xFF07:
+                                return TIMER.rb(addr);
+                            default:
+                                return 0;
                         }
 
                 };
+                return 0;
 
 
         };
@@ -162,28 +212,123 @@ MMU = {
         
             // fall through
             case 0x1000:
+                switch(MMU._carttype){
+                    case 2:
+                    case 3:
+                        MMU._mbc[1].ramEnabled = ((val & 0x0f) == 0x0A) ? 1 : 0;
+                    break;
+                    case 0x19:
+                    case 0x1A:
+                    case 0x1B:
+                    case 0x1C:
+                    case 0x1D:
+                    case 0x1E:
+                        MMU._mbc[5].ramEnabled = ((val & 0x0f) == 0x0A) ? 1 : 0;
+                    break;
+                }
+                break;
+
+            // MBC1 ROM bank
             case 0x2000:
             case 0x3000:
+                // set the lower 5 bits of the ROM bank number
+                switch(MMU._carttype){
+                    case 1: 
+                    case 2: 
+                    case 3:
+                        if(!val) 
+                            val = 1;
+                        
+                        MMU._mbc[1].romBank = (MMU._mbc[1].romBank & 0x60) + val;
+                        // calculate ROM bank offset
+                        MMU._rombankoffset = MMU._mbc[1].romBank * 0x4000;
+
+                    break;
+                    case 0x19:
+                    case 0x1A:
+                    case 0x1B:
+                    case 0x1C:
+                    case 0x1D:
+                    case 0x1E:
+                        MMU._mbc[5].romBank = (MMU._mbc[5].romBank & 0x100) | val;
+                        MMU._rombankoffset = MMU._mbc[5].romBank * 0x4000;
+
+                    break;
+                }
+                break;
+
+            case 0x3000:
+                switch(MMU._carttype){
+                    case 0x19:
+                    case 0x1A:
+                    case 0x1B:
+                    case 0x1C:
+                    case 0x1D:
+                    case 0x1E:
+                        MMU._mbc[5].romBank = (MMU._mbc[5].romBank & 0xFF) | ((val & 0x01) << 8);
+                        MMU._rombankoffset = MMU._mbc[5].romBank * 0x4000;
+                    break;
+                }
                 break;
             
-            // ROM bank 1
+            // RAM bank 1
             case 0x4000:
             case 0x5000:
+                    switch(MMU._carttype){
+                        case 1:
+                        case 2:
+                        case 3:
+                            // MBC1: set RAM bank number or upper bits of ROM bank number, depending on banking mode
+                            if(MMU._mbc[1].bankingMode){
+                                MMU._mbc[1].ramBank = val & 3;
+                                MMU._rambankoffset = MMU._mbc[1].ramBank * 0x2000;
+                            }
+                            //ROM banking mode: set high bits of ROM bank
+                            else {
+                                MMU._mbc[1].romBank = (MMU._mbc[1].romBank & 0x1F) + ((val & 3) << 5);
+                                MMU._rombankoffset = MMU._mbc[1].romBank * 0x4000;
+                            }
+                        break;
+                        case 0x19:
+                        case 0x1A:
+                        case 0x1B:
+                        case 0x1C:
+                        case 0x1D:
+                        case 0x1E:
+                            MMU._mbc[5].ramBank = val & 0x0F;
+                            MMU._rambankoffset = MMU._mbc[5].ramBank * 0x2000;
+                        break;
+                    }
+                break;
             case 0x6000:
             case 0x7000:
-                break;
+                switch(MMU._carttype)
+	        	{
+		            case 1:
+		            case 2:
+		            case 3:
+	    	        MMU._mbc[1].bankingMode = val & 1;
+			        break;
+		        }
+            break;
     
             // VRAM
             case 0x8000:
             case 0x9000:
                 GPU._vram[addr & 0x1FFF] = val;
-                gpu.updatetile(addr & 0x1FFF, val);
+                if(typeof GPU.updatetile === 'function') {
+                    GPU.updatetile(addr & 0x1FFF, val);
+                    if(!MMU._vramWriteLogged) {
+                        console.log('VRAM write detected at address 0x' + addr.toString(16));
+                        MMU._vramWriteLogged = true;
+                    }
+                }
                 break;
 
             // External RAM
             case 0xA000:
             case 0xB000:
-                MMU._eram[addr & 0x1FFF] + val;
+                MMU._eram[MMU._rambankoffset + (addr & 0x1FFF)] = val;
                 break;
             
             // Work RAM and Echo
@@ -206,25 +351,50 @@ MMU = {
 
                     //OAM
                     case 0xE00:
-                        if((addr & 0xFF) < 0xA0)
-                            GPU._oam[addr & 0xFF] = val;
-                        GPU.updateoam(addr, val);
+                        if((addr < 0xFEA0)) GPU._oam[addr & 0xFF] = val;
+                        GPU.buildobjdata(addr - 0xFE00, val);
                         break;
                     
                     // Zero-page RAM, I/O
                     case 0xF00:
-                        if(addr > 0xFF7F)
+                        if(addr == 0xFFFF)
+                            MMU._ie = val;
+                        else if(addr == 0xFF0F)
+                            MMU._if = val;
+                        else if(addr > 0xFF7F)
                             MMU._zram[addr & 0x7F] = val;
                         else
                         {
                             // I/O
-                            switch(addr & 0xF0){
-                                // GPU
-                                case 0x40:
-                                case 0x50:
-                                case 0x60:
-                                case 0x70:
+                            switch(addr){
+                                case 0xFF00:
+                                    KEY.wb(addr, val);
+                                    break;
+
+                                case 0xFF04:
+                                case 0xFF05:
+                                case 0xFF06:
+                                case 0xFF07:
+                                    TIMER.wb(addr, val);
+                                    break;
+
+                                case 0xFF40:
+                                case 0xFF41:
+                                case 0xFF42:
+                                case 0xFF43:
+                                case 0xFF45:
+                                case 0xFF47:
+                                case 0xFF48:
+                                case 0xFF49:
+                                case 0xFF4A:
+                                case 0xFF4B:
                                     GPU.wb(addr, val);
+                                    break;
+
+                                case 0xFF46:
+                                    var base = val << 8;
+                                    for(var i = 0; i < 0xA0; i++)
+                                        MMU.wb(0xFE00 + i, MMU.rb(base + i));
                                     break;
 
                             }
