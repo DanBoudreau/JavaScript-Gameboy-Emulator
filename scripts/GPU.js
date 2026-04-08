@@ -23,17 +23,6 @@ GPU = {
                 // initialize to black screen
                 for(var i = 0; i<160*144*4; i++)
                     GPU._screen.data[i] = (i % 4 === 3) ? 255 : 0;
-                
-                // Draw a test pattern
-                for(var y = 0; y < 10; y++) {
-                    for(var x = 0; x < 10; x++) {
-                        var offset = (y * 160 + x) * 4;
-                        GPU._screen.data[offset] = 255;     // R
-                        GPU._screen.data[offset + 1] = 255; // G
-                        GPU._screen.data[offset + 2] = 255; // B
-                        GPU._screen.data[offset + 3] = 255; // A
-                    }
-                }
 
                 GPU._canvas.putImageData(GPU._screen, 0, 0);
             }
