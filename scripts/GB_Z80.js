@@ -367,6 +367,8 @@ Z80 = {
                 Z80._clock.t += Z80._stepT;
                 if(typeof TIMER !== 'undefined' && TIMER && typeof TIMER.inc === 'function')
                     TIMER.inc();
+                if(typeof APU !== 'undefined' && APU && typeof APU.step === 'function')
+                    APU.step(Z80._stepT);
                 return;
             }
 
@@ -416,6 +418,8 @@ Z80 = {
             Z80._clock.t += Z80._stepT;
             if(typeof TIMER !== 'undefined' && TIMER && typeof TIMER.inc === 'function')
                 TIMER.inc();
+            if(typeof APU !== 'undefined' && APU && typeof APU.step === 'function')
+                APU.step(Z80._stepT);
             
             // Log PC progression at key points
             if(Z80._lastLoggedPC !== pc) {
