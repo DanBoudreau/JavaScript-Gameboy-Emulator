@@ -7,8 +7,12 @@ APU = {
     _frameClock: 0,
     _frameStep: 0,
     _bufferSize: 1024,
-    _maxQueuedSamples: 16384,
-    _sampleQueue: [],
+    _maxQueuedSamples: 65536,
+    _sampleQueueLeft: null,
+    _sampleQueueRight: null,
+    _sampleReadIndex: 0,
+    _sampleWriteIndex: 0,
+    _queuedSamples: 0,
     _audioContext: null,
     _processor: null,
     _masterGain: null,
@@ -25,13 +29,19 @@ APU = {
     _channel2: null,
     _channel3: null,
     _channel4: null,
+    _lastLeftSample: 0,
+    _lastRightSample: 0,
 
     // Reset APU state and rebuild channel objects
     reset: function() {
         APU._sampleClock = 0;
         APU._frameClock = 0;
         APU._frameStep = 0;
-        APU._sampleQueue = [];
+        APU._sampleReadIndex = 0;
+        APU._sampleWriteIndex = 0;
+        APU._queuedSamples = 0;
+        APU._lastLeftSample = 0;
+        APU._lastRightSample = 0;
         APU._masterEnabled = true;
         APU._volume = 0.18;
         APU._leftVolume = 7;
@@ -39,6 +49,11 @@ APU = {
         APU._routing = 0xFF;
         APU._registers = [];
         APU._waveRam = [];
+
+        if(!APU._sampleQueueLeft || APU._sampleQueueLeft.length !== APU._maxQueuedSamples) {
+            APU._sampleQueueLeft = new Float32Array(APU._maxQueuedSamples);
+            APU._sampleQueueRight = new Float32Array(APU._maxQueuedSamples);
+        }
 
         for(var index = 0; index < 0x30; index++)
             APU._registers[index] = 0;
@@ -116,6 +131,8 @@ APU = {
             return;
 
         APU._audioContext = new AudioCtor();
+    APU._sampleRate = APU._audioContext.sampleRate || 44100;
+    APU._samplePeriod = APU._cpuClock / APU._sampleRate;
         APU._processor = APU._audioContext.createScriptProcessor(APU._bufferSize, 0, 2);
         APU._masterGain = APU._audioContext.createGain();
         APU._masterGain.gain.value = APU._volume;
@@ -125,14 +142,17 @@ APU = {
             var right = event.outputBuffer.getChannelData(1);
 
             for(var index = 0; index < left.length; index++) {
-                if(APU._sampleQueue.length) {
-                    var sample = APU._sampleQueue.shift();
-                    left[index] = sample.left;
-                    right[index] = sample.right;
+                if(APU._queuedSamples > 0) {
+                    left[index] = APU._sampleQueueLeft[APU._sampleReadIndex];
+                    right[index] = APU._sampleQueueRight[APU._sampleReadIndex];
+                    APU._lastLeftSample = left[index];
+                    APU._lastRightSample = right[index];
+                    APU._sampleReadIndex = (APU._sampleReadIndex + 1) % APU._maxQueuedSamples;
+                    APU._queuedSamples--;
                 }
                 else {
-                    left[index] = 0;
-                    right[index] = 0;
+                    left[index] = APU._lastLeftSample;
+                    right[index] = APU._lastRightSample;
                 }
             }
         };
@@ -152,7 +172,11 @@ APU = {
 
     disableAudio: function() {
         APU._userEnabled = false;
-        APU._sampleQueue = [];
+        APU._sampleReadIndex = 0;
+        APU._sampleWriteIndex = 0;
+        APU._queuedSamples = 0;
+        APU._lastLeftSample = 0;
+        APU._lastRightSample = 0;
     },
 
     setVolume: function(level) {
@@ -256,13 +280,18 @@ APU = {
         if(!APU._userEnabled || !APU._scriptNodeReady)
             return;
 
-        if(APU._sampleQueue.length >= APU._maxQueuedSamples)
-            APU._sampleQueue.splice(0, APU._sampleQueue.length - APU._maxQueuedSamples + 1);
+        left = Math.max(-1, Math.min(1, left * 0.2));
+        right = Math.max(-1, Math.min(1, right * 0.2));
 
-        APU._sampleQueue.push({
-            left: Math.max(-1, Math.min(1, left * 0.2)),
-            right: Math.max(-1, Math.min(1, right * 0.2))
-        });
+        if(APU._queuedSamples >= APU._maxQueuedSamples) {
+            APU._sampleReadIndex = (APU._sampleReadIndex + 1) % APU._maxQueuedSamples;
+            APU._queuedSamples--;
+        }
+
+        APU._sampleQueueLeft[APU._sampleWriteIndex] = left;
+        APU._sampleQueueRight[APU._sampleWriteIndex] = right;
+        APU._sampleWriteIndex = (APU._sampleWriteIndex + 1) % APU._maxQueuedSamples;
+        APU._queuedSamples++;
     },
 
     // Per-channel waveform sampling helpers
